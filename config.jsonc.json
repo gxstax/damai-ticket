@@ -1,0 +1,13 @@
+{
+  "server_url": "http://127.0.0.1:4723",
+  "keyword": "颜人中",
+  "users": [
+    "高鑫鑫",
+    "辛丽娇"
+  ],
+  "city": "深圳",
+  "date": "07.31",
+  "price": "188元",
+  "price_index": 1,
+  "if_commit_order": false
+}

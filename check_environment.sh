@@ -1,126 +1,158 @@
 #!/bin/bash
-# 大麦抢票 - 环境检查脚本
+# 大麦抢票 - 环境检查脚本（支持 Android & HarmonyOS）
 # 使用方法: ./check_environment.sh
 
-echo "🔍 检查大麦抢票环境..."
-echo "================================"
+echo "========================================="
+echo "  大麦抢票 - 环境检查"
+echo "========================================="
+echo ""
 
-# 检查Python
-echo "🐍 检查Python环境..."
+# 检测 ADB 路径
+detect_adb() {
+    if command -v adb &> /dev/null; then
+        ADB_CMD=$(which adb)
+    elif [ -f "$HOME/Library/Android/sdk/platform-tools/adb" ]; then
+        ADB_CMD="$HOME/Library/Android/sdk/platform-tools/adb"
+        export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
+    elif [ -d "$HOME/Android/Sdk/platform-tools" ]; then
+        ADB_CMD="$HOME/Android/Sdk/platform-tools/adb"
+        export PATH="$HOME/Android/Sdk/platform-tools:$PATH"
+    else
+        echo "   ⚠️ 未找到 ADB"
+        echo "   安装: brew install android-platform-tools"
+        return 1
+    fi
+    echo "   ✅ $ADB_CMD"
+    return 0
+}
+
+# 检查 Python
+echo "🐍 Python 环境..."
 if command -v python3 &> /dev/null; then
-    PYTHON_VERSION=$(python3 --version)
-    echo "✅ Python: $PYTHON_VERSION"
+    echo "   ✅ $(python3 --version)"
 else
-    echo "❌ Python未安装"
+    echo "   ❌ Python3 未安装"
     exit 1
 fi
-
-# 检查Node.js
 echo ""
-echo "📦 检查Node.js环境..."
+
+# 检查 Node.js
+echo "📦 Node.js 环境..."
 if command -v node &> /dev/null; then
-    NODE_VERSION=$(node --version)
-    echo "✅ Node.js: $NODE_VERSION"
-    
-    # 检查版本是否兼容
+    echo "   ✅ Node.js: $(node --version)"
     NODE_MAJOR=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-    if [ "$NODE_MAJOR" -ge 20 ]; then
-        echo "✅ Node.js版本兼容"
+    if [ "$NODE_MAJOR" -ge 18 ]; then
+        echo "   ✅ Node.js 版本兼容"
     else
-        echo "⚠️  Node.js版本可能不兼容，建议升级到20.19.0+"
+        echo "   ⚠️ Node.js 版本可能不兼容，建议升级到 18+"
     fi
 else
-    echo "❌ Node.js未安装"
+    echo "   ❌ Node.js 未安装"
     exit 1
 fi
-
-# 检查Appium
 echo ""
-echo "🤖 检查Appium..."
+
+# 检查 Appium
+echo "🤖 Appium..."
 if command -v appium &> /dev/null; then
-    APPIUM_VERSION=$(appium --version)
-    echo "✅ Appium: $APPIUM_VERSION"
+    echo "   ✅ Appium: $(appium --version)"
+    APPIUM_DRIVERS=$(appium driver list --installed 2>/dev/null || appium driver list 2>/dev/null)
+    if echo "$APPIUM_DRIVERS" | grep -q "uiautomator2"; then
+        echo "   ✅ UiAutomator2 驱动已安装"
+    else
+        echo "   ⚠️ UiAutomator2 驱动未安装"
+        echo "   运行: appium driver install uiautomator2"
+    fi
 else
-    echo "❌ Appium未安装"
-    echo "   安装命令: npm install -g appium"
-    exit 1
+    echo "   ❌ Appium 未安装"
+    echo "   安装: npm install -g appium"
 fi
-
-# 检查Android SDK
 echo ""
-echo "📱 检查Android SDK..."
-if [ -d "/Users/shengwang/Library/Android/sdk" ]; then
-    echo "✅ Android SDK路径存在"
-    export ANDROID_HOME=/Users/shengwang/Library/Android/sdk
-    export ANDROID_SDK_ROOT=/Users/shengwang/Library/Android/sdk
-else
-    echo "❌ Android SDK路径不存在"
-    echo "   请安装Android Studio并配置SDK"
-    exit 1
-fi
 
-# 检查ADB
+# 检查 ADB
+echo "🔧 ADB..."
+detect_adb
 echo ""
-echo "🔧 检查ADB..."
+
+# 检查设备
+echo "📱 设备连接..."
 if command -v adb &> /dev/null; then
-    echo "✅ ADB可用"
+    ADB_TOOL="adb"
+elif [ -n "$ADB_CMD" ]; then
+    ADB_TOOL="$ADB_CMD"
 else
-    ADB_PATH="/Users/shengwang/Library/Android/sdk/platform-tools/adb"
-    if [ -f "$ADB_PATH" ]; then
-        echo "✅ ADB路径: $ADB_PATH"
-    else
-        echo "❌ ADB未找到"
-        exit 1
-    fi
+    ADB_TOOL=""
 fi
 
-# 检查Android设备
-echo ""
-echo "📱 检查Android设备..."
-DEVICES=$(/Users/shengwang/Library/Android/sdk/platform-tools/adb devices | grep -c "device$")
-if [ $DEVICES -eq 0 ]; then
-    echo "⚠️  未检测到Android设备"
-    echo "   请启动模拟器或连接真机"
-    echo "   启动模拟器: /Users/shengwang/Library/Android/sdk/emulator/emulator -avd Medium_Phone_API_36.0"
-else
-    echo "✅ 检测到 $DEVICES 个Android设备"
-    
-    # 检查大麦APP
-    if /Users/shengwang/Library/Android/sdk/platform-tools/adb shell pm list packages | grep -q "cn.damai"; then
-        echo "✅ 大麦APP已安装"
+if [ -n "$ADB_TOOL" ]; then
+    DEVICES=$($ADB_TOOL devices 2>/dev/null | grep -c "device$")
+    if [ "$DEVICES" -eq 0 ]; then
+        echo "   ⚠️ 未检测到设备"
+        echo ""
+        echo "   🔔 HarmonyOS 设备连接步骤:"
+        echo "   1. 「设置」→「关于手机」→ 连续点击「版本号」7 次"
+        echo "   2. 「设置」→「系统和更新」→「开发人员选项」→ 开启「USB 调试」"
+        echo "   3. HarmonyOS 4.x+ 需开启「USB 调试（安全设置）」"
+        echo "   4. 连接 USB 线并在手机上授权"
+        echo "   5. 验证: adb devices"
     else
-        echo "⚠️  大麦APP未安装"
-        echo "   请在设备上安装大麦APP"
-    fi
-fi
+        echo "   ✅ 检测到 $DEVICES 个设备"
 
-# 检查Appium服务器
-echo ""
-echo "🌐 检查Appium服务器..."
-if curl -s http://127.0.0.1:4723/status > /dev/null; then
-    echo "✅ Appium服务器正在运行"
+        # 逐个显示设备信息
+        for SERIAL in $($ADB_TOOL devices 2>/dev/null | grep "device$" | cut -f1); do
+            MODEL=$($ADB_TOOL -s "$SERIAL" shell getprop ro.product.model 2>/dev/null | tr -d '\r')
+            VERSION=$($ADB_TOOL -s "$SERIAL" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')
+            HW_SDK=$($ADB_TOOL -s "$SERIAL" shell getprop ro.hw.build.version.sdk 2>/dev/null | tr -d '\r')
+
+            if [ -n "$HW_SDK" ]; then
+                echo "      ├─ $MODEL (HarmonyOS $VERSION)"
+            else
+                echo "      ├─ $MODEL (Android $VERSION)"
+            fi
+            echo "      └─ 序列号: $SERIAL"
+        done
+
+        # 检查大麦 APP
+        echo ""
+        echo "📱 大麦 APP..."
+        if $ADB_TOOL shell pm list packages 2>/dev/null | grep -q "cn.damai"; then
+            echo "   ✅ 大麦 APP 已安装"
+        else
+            echo "   ❌ 大麦 APP 未安装"
+            echo "   请在设备上安装大麦 APP"
+        fi
+    fi
 else
-    echo "⚠️  Appium服务器未运行"
-    echo "   启动命令: ./start_appium.sh"
+    echo "   ⚠️ ADB 不可用，无法检测设备"
 fi
+echo ""
+
+# 检查 Appium 服务器
+echo "🌐 Appium 服务器..."
+if curl -s http://127.0.0.1:4723/status > /dev/null 2>&1; then
+    echo "   ✅ Appium 服务器正在运行 (http://127.0.0.1:4723)"
+else
+    echo "   ⚠️ Appium 服务器未运行"
+    echo "   启动: ./start_appium.sh"
+fi
+echo ""
 
 # 检查配置文件
-echo ""
-echo "📋 检查配置文件..."
+echo "📋 配置文件..."
 if [ -f "damai_appium/config.jsonc" ]; then
-    echo "✅ 配置文件存在"
+    echo "   ✅ 配置文件存在"
     echo "   当前配置:"
-    cat damai_appium/config.jsonc | grep -E '"keyword"|"city"|"users"' | head -3 | sed 's/^/   /'
+    grep -E '"keyword"|"city"|"users"|"platformName"|"deviceName"' damai_appium/config.jsonc | head -5 | sed 's/^/     /'
 else
-    echo "❌ 配置文件不存在"
-    echo "   请创建 damai_appium/config.jsonc 文件"
+    echo "   ❌ 配置文件不存在"
 fi
+echo ""
 
+echo "========================================="
+echo "  环境检查完成！"
+echo "========================================="
 echo ""
-echo "================================"
-echo "🎯 环境检查完成！"
-echo ""
-echo "📝 使用说明:"
-echo "   1. 启动Appium: ./start_appium.sh"
-echo "   2. 开始抢票: ./start_ticket_grabbing.sh"
+echo "使用说明:"
+echo "  1. 启动 Appium:  ./start_appium.sh"
+echo "  2. 开始抢票:    cd damai_appium && python damai_app_v2.py"
 echo ""
